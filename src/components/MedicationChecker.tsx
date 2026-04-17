@@ -56,8 +56,67 @@ export function MedicationChecker() {
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [timeline, setTimeline] = useState(50);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const [activeSuggest, setActiveSuggest] = useState(0);
+  const [loadingSuggest, setLoadingSuggest] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const compoundsRef = useRef<HTMLTextAreaElement | null>(null);
+  const suggestSeq = useRef(0);
+
+  // Get the "current word" being typed (text after the last comma/newline before caret)
+  const getCurrentToken = (text: string, caret: number) => {
+    const before = text.slice(0, caret);
+    const sep = Math.max(before.lastIndexOf(","), before.lastIndexOf("\n"));
+    const start = sep + 1;
+    const token = before.slice(start).replace(/^\s+/, "");
+    return { token, start: caret - token.length, end: caret };
+  };
+
+  // Debounced suggestion fetch
+  useEffect(() => {
+    if (!showSuggest) return;
+    const el = compoundsRef.current;
+    if (!el) return;
+    const { token } = getCurrentToken(compounds, el.selectionStart ?? compounds.length);
+    if (token.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    const seq = ++suggestSeq.current;
+    setLoadingSuggest(true);
+    const t = setTimeout(async () => {
+      try {
+        const out = await suggestDrugs({ data: { query: token.trim() } });
+        if (seq === suggestSeq.current) {
+          setSuggestions(out.suggestions);
+          setActiveSuggest(0);
+        }
+      } catch {
+        if (seq === suggestSeq.current) setSuggestions([]);
+      } finally {
+        if (seq === suggestSeq.current) setLoadingSuggest(false);
+      }
+    }, 220);
+    return () => clearTimeout(t);
+  }, [compounds, showSuggest]);
+
+  const applySuggestion = (s: string) => {
+    const el = compoundsRef.current;
+    const caret = el?.selectionStart ?? compounds.length;
+    const { start, end } = getCurrentToken(compounds, caret);
+    const next = compounds.slice(0, start) + s + ", " + compounds.slice(end);
+    setCompounds(next);
+    setSuggestions([]);
+    setShowSuggest(false);
+    requestAnimationFrame(() => {
+      const pos = start + s.length + 2;
+      el?.focus();
+      el?.setSelectionRange(pos, pos);
+    });
+  };
+
 
   // Image upload
   const handleImage = (file?: File | null) => {
