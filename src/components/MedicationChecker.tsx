@@ -58,8 +58,30 @@ export function MedicationChecker() {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setImageUrl(url);
-    setScanning(true);
-    setTimeout(() => setScanning(false), 2200);
+    // Read as base64 and run OCR
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result || "");
+      const base64 = dataUrl.split(",")[1] || "";
+      if (!base64) return;
+      setScanning(true);
+      try {
+        const out = await ocrPrescription({
+          data: { imageBase64: base64, mimeType: file.type || "image/jpeg" },
+        });
+        if (out.compounds.length) {
+          setCompounds((c) => (c ? c + ", " : "") + out.compounds.join(", "));
+        } else if (out.text) {
+          setCompounds((c) => (c ? c + "\n" : "") + out.text.slice(0, 300));
+        }
+      } catch (err) {
+        console.error("OCR error", err);
+        alert(`OCR failed: ${err instanceof Error ? err.message : "unknown error"}`);
+      } finally {
+        setScanning(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   // Voice input
@@ -95,21 +117,39 @@ export function MedicationChecker() {
 
   useEffect(() => () => recognitionRef.current?.stop(), []);
 
-  const runAnalysis = () => {
+  const runAnalysis = async () => {
     if (!compounds.trim() && !problem.trim()) {
       setResult({
         risk: "low",
         headline: "// awaiting input //",
         lines: ["No compounds detected on the temporal scanner."],
+        normalized: [],
+        interactions: [],
+        warnings: [],
       });
       return;
     }
     setAnalyzing(true);
     setResult(null);
-    setTimeout(() => {
-      setResult(analyze(compounds, problem));
+    try {
+      const out = await analyzeDrugs({ data: { compounds, problem } });
+      setResult(out);
+    } catch (err) {
+      console.error("Analysis error", err);
+      setResult({
+        risk: "high",
+        headline: "✕ TEMPORAL LINK SEVERED",
+        lines: [
+          "analysis engine unreachable…",
+          err instanceof Error ? err.message : "unknown error",
+        ],
+        normalized: [],
+        interactions: [],
+        warnings: [],
+      });
+    } finally {
       setAnalyzing(false);
-    }, 1800);
+    }
   };
 
   return (
