@@ -280,3 +280,46 @@ export const ocrPrescription = createServerFn({ method: "POST" })
     }
     return { text, compounds: Array.from(candidates).slice(0, 10) };
   });
+
+// ===== Server Function: Drug name suggestions (RxNorm) =====
+export const suggestDrugs = createServerFn({ method: "POST" })
+  .inputValidator((input: { query: string }) => {
+    if (typeof input?.query !== "string") throw new Error("query must be a string");
+    return { query: input.query.slice(0, 60).trim() };
+  })
+  .handler(async ({ data }): Promise<{ suggestions: string[] }> => {
+    const q = data.query;
+    if (q.length < 2) return { suggestions: [] };
+    const enc = encodeURIComponent(q);
+
+    // Run spellingsuggestions + approximateTerm in parallel
+    const [spell, approx] = await Promise.all([
+      fetchJson<{ suggestionGroup?: { suggestionList?: { suggestion?: string[] } } }>(
+        `https://rxnav.nlm.nih.gov/REST/spellingsuggestions.json?name=${enc}`,
+      ),
+      fetchJson<{ approximateGroup?: { candidate?: { rxcui: string; name?: string }[] } }>(
+        `https://rxnav.nlm.nih.gov/REST/approximateTerm.json?term=${enc}&maxEntries=8`,
+      ),
+    ]);
+
+    const out = new Set<string>();
+    for (const s of spell?.suggestionGroup?.suggestionList?.suggestion ?? []) {
+      if (s) out.add(s);
+    }
+
+    // Resolve approximate rxcuis to canonical names (cap to 5 lookups)
+    const cands = (approx?.approximateGroup?.candidate ?? []).slice(0, 5);
+    const props = await Promise.all(
+      cands.map((c) =>
+        fetchJson<{ properties?: { name?: string } }>(
+          `https://rxnav.nlm.nih.gov/REST/rxcui/${c.rxcui}/properties.json`,
+        ),
+      ),
+    );
+    for (const p of props) {
+      const n = p?.properties?.name;
+      if (n) out.add(n);
+    }
+
+    return { suggestions: Array.from(out).slice(0, 8) };
+  });

@@ -26,7 +26,13 @@ import { Waveform } from "./Waveform";
 import { RiskGauge } from "./RiskGauge";
 import { TimelineSlider } from "./TimelineSlider";
 import { Particles } from "./Particles";
-import { analyzeDrugs, ocrPrescription, type AnalysisResult, type Risk } from "@/server/drug-analysis";
+import {
+  analyzeDrugs,
+  ocrPrescription,
+  suggestDrugs,
+  type AnalysisResult,
+  type Risk,
+} from "@/server/drug-analysis";
 
 type Result = AnalysisResult;
 
@@ -50,8 +56,67 @@ export function MedicationChecker() {
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [timeline, setTimeline] = useState(50);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const [activeSuggest, setActiveSuggest] = useState(0);
+  const [loadingSuggest, setLoadingSuggest] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const compoundsRef = useRef<HTMLTextAreaElement | null>(null);
+  const suggestSeq = useRef(0);
+
+  // Get the "current word" being typed (text after the last comma/newline before caret)
+  const getCurrentToken = (text: string, caret: number) => {
+    const before = text.slice(0, caret);
+    const sep = Math.max(before.lastIndexOf(","), before.lastIndexOf("\n"));
+    const start = sep + 1;
+    const token = before.slice(start).replace(/^\s+/, "");
+    return { token, start: caret - token.length, end: caret };
+  };
+
+  // Debounced suggestion fetch
+  useEffect(() => {
+    if (!showSuggest) return;
+    const el = compoundsRef.current;
+    if (!el) return;
+    const { token } = getCurrentToken(compounds, el.selectionStart ?? compounds.length);
+    if (token.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    const seq = ++suggestSeq.current;
+    setLoadingSuggest(true);
+    const t = setTimeout(async () => {
+      try {
+        const out = await suggestDrugs({ data: { query: token.trim() } });
+        if (seq === suggestSeq.current) {
+          setSuggestions(out.suggestions);
+          setActiveSuggest(0);
+        }
+      } catch {
+        if (seq === suggestSeq.current) setSuggestions([]);
+      } finally {
+        if (seq === suggestSeq.current) setLoadingSuggest(false);
+      }
+    }, 220);
+    return () => clearTimeout(t);
+  }, [compounds, showSuggest]);
+
+  const applySuggestion = (s: string) => {
+    const el = compoundsRef.current;
+    const caret = el?.selectionStart ?? compounds.length;
+    const { start, end } = getCurrentToken(compounds, caret);
+    const next = compounds.slice(0, start) + s + ", " + compounds.slice(end);
+    setCompounds(next);
+    setSuggestions([]);
+    setShowSuggest(false);
+    requestAnimationFrame(() => {
+      const pos = start + s.length + 2;
+      el?.focus();
+      el?.setSelectionRange(pos, pos);
+    });
+  };
+
 
   // Image upload
   const handleImage = (file?: File | null) => {
@@ -195,8 +260,29 @@ export function MedicationChecker() {
             </div>
             <div className="relative">
               <textarea
+                ref={compoundsRef}
                 value={compounds}
-                onChange={(e) => setCompounds(e.target.value)}
+                onChange={(e) => {
+                  setCompounds(e.target.value);
+                  setShowSuggest(true);
+                }}
+                onFocus={() => setShowSuggest(true)}
+                onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
+                onKeyDown={(e) => {
+                  if (!showSuggest || suggestions.length === 0) return;
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setActiveSuggest((i) => (i + 1) % suggestions.length);
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setActiveSuggest((i) => (i - 1 + suggestions.length) % suggestions.length);
+                  } else if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    applySuggestion(suggestions[activeSuggest]);
+                  } else if (e.key === "Escape") {
+                    setShowSuggest(false);
+                  }
+                }}
                 rows={4}
                 placeholder="Enter compounds across timelines..."
                 className="w-full bg-[var(--input)] border border-[var(--brass)]/40 rounded-md p-3 font-mono-tw text-sm
@@ -204,8 +290,36 @@ export function MedicationChecker() {
                   focus:outline-none focus:border-[var(--neon)] focus:shadow-[0_0_18px_var(--neon)]/40 transition"
               />
               <div className="absolute top-2 right-3 text-[10px] uppercase tracking-widest text-muted-foreground">
-                {compounds.length} ch
+                {loadingSuggest ? <span className="neon-text">⟳ scanning…</span> : `${compounds.length} ch`}
               </div>
+              {showSuggest && suggestions.length > 0 && (
+                <ul
+                  className="absolute z-30 left-0 right-0 mt-1 max-h-64 overflow-auto rounded-md
+                    border border-[var(--neon)]/50 bg-background/95 backdrop-blur
+                    shadow-[0_0_24px_var(--neon)]/30 font-mono-tw text-sm"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  <li className="px-3 py-1 text-[10px] uppercase tracking-[0.25em] amber-text border-b border-[var(--brass)]/30 flex items-center justify-between">
+                    <span>⟶ rxnorm matches</span>
+                    <span className="text-muted-foreground">↑↓ · ⏎ select</span>
+                  </li>
+                  {suggestions.map((s, i) => (
+                    <li
+                      key={s}
+                      onMouseEnter={() => setActiveSuggest(i)}
+                      onClick={() => applySuggestion(s)}
+                      className={`px-3 py-2 cursor-pointer flex items-center gap-2 transition ${
+                        i === activeSuggest
+                          ? "bg-[var(--neon)]/15 neon-text"
+                          : "text-foreground/80 hover:bg-[var(--brass)]/10"
+                      }`}
+                    >
+                      <Pill className="w-3.5 h-3.5 amber-text shrink-0" />
+                      <span className="truncate">{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </section>
 
