@@ -26,7 +26,13 @@ import { Waveform } from "./Waveform";
 import { RiskGauge } from "./RiskGauge";
 import { TimelineSlider } from "./TimelineSlider";
 import { Particles } from "./Particles";
-import { analyzeDrugs, ocrPrescription, type AnalysisResult, type Risk } from "@/server/drug-analysis";
+import {
+  analyzeDrugs,
+  ocrPrescription,
+  suggestDrugs,
+  type AnalysisResult,
+  type Risk,
+} from "@/server/drug-analysis";
 
 type Result = AnalysisResult;
 
