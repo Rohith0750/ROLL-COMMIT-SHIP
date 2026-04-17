@@ -435,15 +435,92 @@ function Readout({ result }: { result: Result }) {
           </li>
         ))}
       </ul>
+
+      {result.normalized.length > 0 && (
+        <div className="mt-5">
+          <div className="text-[10px] uppercase tracking-[0.25em] amber-text mb-2">
+            ⟶ normalized compounds (rxnorm)
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {result.normalized.map((n, i) => (
+              <span
+                key={i}
+                className={`px-2 py-1 rounded border text-[11px] font-mono-tw ${
+                  n.found
+                    ? "border-[var(--neon)]/50 neon-text"
+                    : "border-destructive/50 text-destructive"
+                }`}
+                title={n.rxcui ? `RxCUI ${n.rxcui}` : "not found"}
+              >
+                {n.found ? n.name : `? ${n.input}`}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {result.interactions.length > 0 && (
+        <div className="mt-5">
+          <div className="text-[10px] uppercase tracking-[0.25em] amber-text mb-2">
+            ⟶ documented interactions (openfda)
+          </div>
+          <ul className="space-y-2">
+            {result.interactions.map((i, idx) => (
+              <li
+                key={idx}
+                className={`border-l-2 pl-3 text-xs ${
+                  i.severity === "high"
+                    ? "border-destructive"
+                    : i.severity === "medium"
+                      ? "border-[var(--amber)]"
+                      : "border-[var(--toxic)]"
+                }`}
+              >
+                <div className="font-display tracking-wider">
+                  <span className="neon-text">{i.a}</span> ⇄ <span className="neon-text">{i.b}</span>{" "}
+                  <span className="text-muted-foreground">[{i.severity}]</span>
+                </div>
+                <div className="text-foreground/70 mt-1">{i.description}</div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {result.warnings.length > 0 && (
+        <div className="mt-5">
+          <div className="text-[10px] uppercase tracking-[0.25em] amber-text mb-2">
+            ⟶ label warnings
+          </div>
+          <ul className="space-y-2 text-xs">
+            {result.warnings.map((w, idx) => (
+              <li key={idx} className="border border-[var(--brass)]/30 rounded p-2">
+                <div className="neon-text font-display tracking-wider mb-1">{w.drug}</div>
+                {w.warnings.map((line, j) => (
+                  <p key={`w${j}`} className="text-foreground/70">
+                    ⚠ {line}
+                  </p>
+                ))}
+                {w.contraindications.map((line, j) => (
+                  <p key={`c${j}`} className="text-destructive/80 mt-1">
+                    ⊘ {line}
+                  </p>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mt-5 grid grid-cols-3 gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
         <div className="border border-[var(--brass)]/30 rounded p-2 text-center">
-          <div className="neon-text">04.21</div>signal
+          <div className="neon-text">{result.normalized.length}</div>scanned
         </div>
         <div className="border border-[var(--brass)]/30 rounded p-2 text-center">
-          <div className="toxic-text">78%</div>integrity
+          <div className="toxic-text">{result.interactions.length}</div>conflicts
         </div>
         <div className="border border-[var(--brass)]/30 rounded p-2 text-center">
-          <div className="amber-text">Δ 0.07</div>drift
+          <div className="amber-text">{result.warnings.length}</div>warnings
         </div>
       </div>
     </div>
