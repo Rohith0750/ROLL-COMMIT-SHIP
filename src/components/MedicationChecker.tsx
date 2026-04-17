@@ -26,55 +26,9 @@ import { Waveform } from "./Waveform";
 import { RiskGauge } from "./RiskGauge";
 import { TimelineSlider } from "./TimelineSlider";
 import { Particles } from "./Particles";
+import { analyzeDrugs, ocrPrescription, type AnalysisResult, type Risk } from "@/server/drug-analysis";
 
-type Risk = "low" | "medium" | "high";
-type Result = {
-  risk: Risk;
-  headline: string;
-  lines: string[];
-};
-
-// Tiny mock analysis — purely client-side
-function analyze(compounds: string, problem: string): Result {
-  const text = (compounds + " " + problem).toLowerCase();
-  const dangerHits = ["warfarin", "mao", "ssri", "tramadol", "alcohol", "grapefruit"].filter((k) =>
-    text.includes(k)
-  ).length;
-  const items = compounds.split(/[,\n]/).filter((s) => s.trim()).length;
-
-  let risk: Risk = "low";
-  if (dangerHits >= 1 || items >= 4) risk = "high";
-  else if (items >= 2) risk = "medium";
-
-  if (risk === "high")
-    return {
-      risk,
-      headline: "⚠ TEMPORAL COLLISION DETECTED",
-      lines: [
-        "molecular interference across timelines…",
-        "stability compromised… molecules diverging…",
-        "advise immediate physician consultation.",
-      ],
-    };
-  if (risk === "medium")
-    return {
-      risk,
-      headline: "◐ MINOR ANOMALY OBSERVED",
-      lines: [
-        "subtle harmonic distortion in compound matrix…",
-        "monitor temporal vitals over 12h cycle…",
-        "consider spacing dosage windows.",
-      ],
-    };
-  return {
-    risk,
-    headline: "✓ TIMELINE STABLE",
-    lines: [
-      "no anomaly detected across observable horizons…",
-      "continuum flow nominal… proceed with caution.",
-    ],
-  };
-}
+type Result = AnalysisResult;
 
 // Web Speech API (best-effort, local)
 type SpeechRecognitionLike = {
