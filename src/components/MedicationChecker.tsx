@@ -26,55 +26,9 @@ import { Waveform } from "./Waveform";
 import { RiskGauge } from "./RiskGauge";
 import { TimelineSlider } from "./TimelineSlider";
 import { Particles } from "./Particles";
+import { analyzeDrugs, ocrPrescription, type AnalysisResult, type Risk } from "@/server/drug-analysis";
 
-type Risk = "low" | "medium" | "high";
-type Result = {
-  risk: Risk;
-  headline: string;
-  lines: string[];
-};
-
-// Tiny mock analysis — purely client-side
-function analyze(compounds: string, problem: string): Result {
-  const text = (compounds + " " + problem).toLowerCase();
-  const dangerHits = ["warfarin", "mao", "ssri", "tramadol", "alcohol", "grapefruit"].filter((k) =>
-    text.includes(k)
-  ).length;
-  const items = compounds.split(/[,\n]/).filter((s) => s.trim()).length;
-
-  let risk: Risk = "low";
-  if (dangerHits >= 1 || items >= 4) risk = "high";
-  else if (items >= 2) risk = "medium";
-
-  if (risk === "high")
-    return {
-      risk,
-      headline: "⚠ TEMPORAL COLLISION DETECTED",
-      lines: [
-        "molecular interference across timelines…",
-        "stability compromised… molecules diverging…",
-        "advise immediate physician consultation.",
-      ],
-    };
-  if (risk === "medium")
-    return {
-      risk,
-      headline: "◐ MINOR ANOMALY OBSERVED",
-      lines: [
-        "subtle harmonic distortion in compound matrix…",
-        "monitor temporal vitals over 12h cycle…",
-        "consider spacing dosage windows.",
-      ],
-    };
-  return {
-    risk,
-    headline: "✓ TIMELINE STABLE",
-    lines: [
-      "no anomaly detected across observable horizons…",
-      "continuum flow nominal… proceed with caution.",
-    ],
-  };
-}
+type Result = AnalysisResult;
 
 // Web Speech API (best-effort, local)
 type SpeechRecognitionLike = {
@@ -104,8 +58,30 @@ export function MedicationChecker() {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setImageUrl(url);
-    setScanning(true);
-    setTimeout(() => setScanning(false), 2200);
+    // Read as base64 and run OCR
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result || "");
+      const base64 = dataUrl.split(",")[1] || "";
+      if (!base64) return;
+      setScanning(true);
+      try {
+        const out = await ocrPrescription({
+          data: { imageBase64: base64, mimeType: file.type || "image/jpeg" },
+        });
+        if (out.compounds.length) {
+          setCompounds((c) => (c ? c + ", " : "") + out.compounds.join(", "));
+        } else if (out.text) {
+          setCompounds((c) => (c ? c + "\n" : "") + out.text.slice(0, 300));
+        }
+      } catch (err) {
+        console.error("OCR error", err);
+        alert(`OCR failed: ${err instanceof Error ? err.message : "unknown error"}`);
+      } finally {
+        setScanning(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   // Voice input
@@ -141,21 +117,39 @@ export function MedicationChecker() {
 
   useEffect(() => () => recognitionRef.current?.stop(), []);
 
-  const runAnalysis = () => {
+  const runAnalysis = async () => {
     if (!compounds.trim() && !problem.trim()) {
       setResult({
         risk: "low",
         headline: "// awaiting input //",
         lines: ["No compounds detected on the temporal scanner."],
+        normalized: [],
+        interactions: [],
+        warnings: [],
       });
       return;
     }
     setAnalyzing(true);
     setResult(null);
-    setTimeout(() => {
-      setResult(analyze(compounds, problem));
+    try {
+      const out = await analyzeDrugs({ data: { compounds, problem } });
+      setResult(out);
+    } catch (err) {
+      console.error("Analysis error", err);
+      setResult({
+        risk: "high",
+        headline: "✕ TEMPORAL LINK SEVERED",
+        lines: [
+          "analysis engine unreachable…",
+          err instanceof Error ? err.message : "unknown error",
+        ],
+        normalized: [],
+        interactions: [],
+        warnings: [],
+      });
+    } finally {
       setAnalyzing(false);
-    }, 1800);
+    }
   };
 
   return (
@@ -441,15 +435,92 @@ function Readout({ result }: { result: Result }) {
           </li>
         ))}
       </ul>
+
+      {result.normalized.length > 0 && (
+        <div className="mt-5">
+          <div className="text-[10px] uppercase tracking-[0.25em] amber-text mb-2">
+            ⟶ normalized compounds (rxnorm)
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {result.normalized.map((n, i) => (
+              <span
+                key={i}
+                className={`px-2 py-1 rounded border text-[11px] font-mono-tw ${
+                  n.found
+                    ? "border-[var(--neon)]/50 neon-text"
+                    : "border-destructive/50 text-destructive"
+                }`}
+                title={n.rxcui ? `RxCUI ${n.rxcui}` : "not found"}
+              >
+                {n.found ? n.name : `? ${n.input}`}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {result.interactions.length > 0 && (
+        <div className="mt-5">
+          <div className="text-[10px] uppercase tracking-[0.25em] amber-text mb-2">
+            ⟶ documented interactions (openfda)
+          </div>
+          <ul className="space-y-2">
+            {result.interactions.map((i, idx) => (
+              <li
+                key={idx}
+                className={`border-l-2 pl-3 text-xs ${
+                  i.severity === "high"
+                    ? "border-destructive"
+                    : i.severity === "medium"
+                      ? "border-[var(--amber)]"
+                      : "border-[var(--toxic)]"
+                }`}
+              >
+                <div className="font-display tracking-wider">
+                  <span className="neon-text">{i.a}</span> ⇄ <span className="neon-text">{i.b}</span>{" "}
+                  <span className="text-muted-foreground">[{i.severity}]</span>
+                </div>
+                <div className="text-foreground/70 mt-1">{i.description}</div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {result.warnings.length > 0 && (
+        <div className="mt-5">
+          <div className="text-[10px] uppercase tracking-[0.25em] amber-text mb-2">
+            ⟶ label warnings
+          </div>
+          <ul className="space-y-2 text-xs">
+            {result.warnings.map((w, idx) => (
+              <li key={idx} className="border border-[var(--brass)]/30 rounded p-2">
+                <div className="neon-text font-display tracking-wider mb-1">{w.drug}</div>
+                {w.warnings.map((line, j) => (
+                  <p key={`w${j}`} className="text-foreground/70">
+                    ⚠ {line}
+                  </p>
+                ))}
+                {w.contraindications.map((line, j) => (
+                  <p key={`c${j}`} className="text-destructive/80 mt-1">
+                    ⊘ {line}
+                  </p>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mt-5 grid grid-cols-3 gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
         <div className="border border-[var(--brass)]/30 rounded p-2 text-center">
-          <div className="neon-text">04.21</div>signal
+          <div className="neon-text">{result.normalized.length}</div>scanned
         </div>
         <div className="border border-[var(--brass)]/30 rounded p-2 text-center">
-          <div className="toxic-text">78%</div>integrity
+          <div className="toxic-text">{result.interactions.length}</div>conflicts
         </div>
         <div className="border border-[var(--brass)]/30 rounded p-2 text-center">
-          <div className="amber-text">Δ 0.07</div>drift
+          <div className="amber-text">{result.warnings.length}</div>warnings
         </div>
       </div>
     </div>
