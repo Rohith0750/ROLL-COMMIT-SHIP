@@ -5,13 +5,14 @@
 ---
 
 ## 🚀 Live Demo
+
 **Access the fully deployed application here:** [https://druginteraction.rohithsd0222.workers.dev/](https://druginteraction.rohithsd0222.workers.dev/)
 
 ---
 
 ## 🎯 Problem Statement
 
-Healthcare professionals and patients often struggle to quickly and accurately determine potential drug interactions when combining multiple medications. The sheer complexity of pharmacological data makes it difficult to understand the severity and mechanisms of these interactions, which can lead to adverse drug events. 
+Healthcare professionals and patients often struggle to quickly and accurately determine potential drug interactions when combining multiple medications. The sheer complexity of pharmacological data makes it difficult to understand the severity and mechanisms of these interactions, which can lead to adverse drug events.
 
 Traditional drug interaction checkers provide dense, text-heavy outputs that are difficult to scan. They lack an intuitive, engaging interface to help users conceptualize overlapping medication effects, assess the immediate risks, and seamlessly generate portable reports for clinical records or personal tracking.
 
@@ -20,6 +21,7 @@ Traditional drug interaction checkers provide dense, text-heavy outputs that are
 Chrono-Med Check solves this by offering a premium, futuristic 3D visual interface (powered by React Three Fiber) to interpret drug interactions. By securely passing medication inputs through advanced AI models (via Groq), it produces a structured, visually engaging clinical readout.
 
 **Key Features:**
+
 - **Antigravity 3D Engine**: Immersive, dynamic 3D visualizations for an unparalleled user experience.
 - **AI-Powered Drug Analysis**: Connects with Groq LLM APIs to generate accurate, detailed, and clinical-grade drug interaction reports.
 - **Hover-to-Unblur Interface**: A sleek UI element that unblurs clinical data on hover, preventing shoulder-surfing while adding interactive depth.
@@ -39,29 +41,34 @@ Chrono-Med Check solves this by offering a premium, futuristic 3D visual interfa
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Node.js (v18 or higher recommended)
 - `npm`, `yarn`, `pnpm`, or `bun`
 
 ### Installation
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/Rohith0750/ROLL-COMMIT-SHIP.git
    cd chrono-med-check
    ```
 
 2. **Install dependencies:**
+
    ```bash
    npm install
    ```
 
 3. **Set up Environment Variables:**
    Create a `.env` file in the root directory and add securely your Groq API Key (and any other necessary variables):
+
    ```env
    VITE_GROQ_API_KEY=your_groq_api_key_here
    VITE_OCR_SPACE_API_KEY=your_ocr_space_api_key_here
    ```
-   *(Note: Never commit your `.env` file!)*
+
+   _(Note: Never commit your `.env` file!)_
 
 4. **Run the Development Server:**
    ```bash
@@ -74,6 +81,7 @@ Chrono-Med Check solves this by offering a premium, futuristic 3D visual interfa
 This application is built as a full-stack **TanStack Start** app leveraging the `@cloudflare/vite-plugin`. This means it generates a `.wrangler` worker configuration and requires a Cloudflare environment to run perfectly (standard Node.js environments like Render are not suitable).
 
 To deploy your own version:
+
 1. Log into your Cloudflare dashboard and navigate to **Workers & Pages**.
 2. Click **Create application** -> **Deploy your Worker Project** and connect your GitHub repository.
 3. Configure the build settings as follows:
@@ -119,8 +127,8 @@ Chrono-Med Check's backend handles data extraction, authoritative knowledge retr
 2. **Drug Normalization (RxNorm API)**: To handle typos and diverse brand names, every compound is sent to the NIH's RxNorm API to be matched and resolved into a canonical/generic name and corresponding `rxcui` identifier.
 3. **Data Retrieval (OpenFDA API)**: For every canonically identified drug, the backend calls the OpenFDA API to retrieve comprehensive clinical label data—specifically scanning for "contraindications", "warnings", and the raw "drug_interactions" text.
 4. **Heuristic Cross-Checking**: The backend parses the FDA data, cross-referencing every queried drug against the interaction texts of the other drugs present in the query. It highlights potential interactions and does initial heuristic risk analysis.
-5. **AI Synthesis (Groq LLM)**: 
-   - All retrieved OpenFDA text, normalized drug lists, and user symptoms are packaged into a structured prompt. 
+5. **AI Synthesis (Groq LLM)**:
+   - All retrieved OpenFDA text, normalized drug lists, and user symptoms are packaged into a structured prompt.
    - Sent to the **llama-3.3-70b-versatile** model via the Groq API.
    - The LLM parses the dense clinical language to interpret true risks, assigns severity (`high`, `medium`, `low`), and generates a short, structured "Clinical Readout" JSON response.
 6. **Delivery**: The synthesized findings (or heuristic fallbacks if the LLM errors) are sent back to the frontend to be rendered in the Antigravity 3D interface.
@@ -134,22 +142,22 @@ sequenceDiagram
     participant NIH RxNorm API
     participant OpenFDA API
     participant Groq LLM (Llama 3)
-    
+
     User/Frontend->>Backend: Submit Drugs + Symptoms
     Backend->>NIH RxNorm API: Fetch Canonical Names via approximate matches
     NIH RxNorm API-->>Backend: Return normalized drug names & rxcui
-    
+
     loop For each canonical drug
         Backend->>OpenFDA API: Fetch warning & interactions labels
         OpenFDA API-->>Backend: Return raw clinical text
     end
-    
+
     Backend->>Backend: Heuristic cross-checking + Symptom correlation
 
     Backend->>Groq LLM (Llama 3): Prompt with Drugs, Context, & FDA Text
     Note over Groq LLM (Llama 3): LLM analyzes clinical data, interprets severity,<br/>and generates readable JSON summary
     Groq LLM (Llama 3)-->>Backend: Structured "Clinical Readout" Result (JSON)
-    
+
     Backend-->>User/Frontend: Render safely behind "Antigravity" Unblur UI
 ```
 
