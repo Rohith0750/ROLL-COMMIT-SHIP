@@ -5,11 +5,11 @@ export const Route = createFileRoute("/")({
   component: Index,
   head: () => ({
     meta: [
-      { title: "Medication Conflict Checker · Temporal Analysis Engine" },
+      { title: "Chrono-Med Check · Advanced Healthcare Analysis" },
       {
         name: "description",
         content:
-          "A futuristic time-traveler's pocket device for analyzing drug interactions and preventing harmful combinations of medicines and supplements.",
+          "Advanced clinical support software for analyzing drug interactions and pharmaceutical safety.",
       },
     ],
   }),

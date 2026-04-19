@@ -5,7 +5,11 @@ type Risk = "low" | "medium" | "high";
 export function RiskGauge({ level }: { level: Risk }) {
   const pct = level === "low" ? 25 : level === "medium" ? 60 : 92;
   const color =
-    level === "low" ? "var(--toxic)" : level === "medium" ? "var(--amber-glow)" : "oklch(0.65 0.25 25)";
+    level === "low"
+      ? "var(--toxic)"
+      : level === "medium"
+        ? "var(--amber-glow)"
+        : "oklch(0.65 0.25 25)";
   const label = level.toUpperCase();
   const Trend = level === "high" ? TrendingUp : TrendingDown;
 

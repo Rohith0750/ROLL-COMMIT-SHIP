@@ -44,7 +44,10 @@ function splitCompounds(raw: string): string[] {
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T | null> {
   try {
-    const res = await fetch(url, { ...init, headers: { Accept: "application/json", ...(init?.headers || {}) } });
+    const res = await fetch(url, {
+      ...init,
+      headers: { Accept: "application/json", ...(init?.headers || {}) },
+    });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -82,7 +85,9 @@ async function fetchLabel(drugName: string): Promise<{
   contraindications: string[];
   interactionsText: string;
 } | null> {
-  const q = encodeURIComponent(`openfda.generic_name:"${drugName}" OR openfda.brand_name:"${drugName}"`);
+  const q = encodeURIComponent(
+    `openfda.generic_name:"${drugName}" OR openfda.brand_name:"${drugName}"`,
+  );
   const data = await fetchJson<{
     results?: Array<{
       warnings?: string[];
@@ -109,7 +114,11 @@ function truncate(s: string, n: number) {
 
 function severityFromText(text: string): Risk {
   const t = text.toLowerCase();
-  if (/(contraindicat|fatal|life-threatening|severe|do not (use|administer)|avoid concomitant)/.test(t))
+  if (
+    /(contraindicat|fatal|life-threatening|severe|do not (use|administer)|avoid concomitant)/.test(
+      t,
+    )
+  )
     return "high";
   if (/(caution|monitor|may increase|may decrease|moderate)/.test(t)) return "medium";
   return "low";
@@ -119,7 +128,10 @@ function severityFromText(text: string): Risk {
 export const analyzeDrugs = createServerFn({ method: "POST" })
   .inputValidator((input: { compounds: string; problem?: string }) => {
     if (typeof input?.compounds !== "string") throw new Error("compounds must be a string");
-    return { compounds: input.compounds.slice(0, 2000), problem: (input.problem || "").slice(0, 1000) };
+    return {
+      compounds: input.compounds.slice(0, 2000),
+      problem: (input.problem || "").slice(0, 1000),
+    };
   })
   .handler(async ({ data }): Promise<AnalysisResult> => {
     const items = splitCompounds(data.compounds);
@@ -140,7 +152,10 @@ export const analyzeDrugs = createServerFn({ method: "POST" })
 
     // 2. Pull labels for each
     const labels = await Promise.all(
-      valid.map(async (d) => ({ drug: d.name as string, label: await fetchLabel(d.name as string) })),
+      valid.map(async (d) => ({
+        drug: d.name as string,
+        label: await fetchLabel(d.name as string),
+      })),
     );
 
     // 3. Build warnings list
@@ -190,12 +205,45 @@ export const analyzeDrugs = createServerFn({ method: "POST" })
     // 5. Determine overall risk
     let risk: Risk = "low";
     if (interactions.some((i) => i.severity === "high")) risk = "high";
-    else if (interactions.some((i) => i.severity === "medium") || valid.length >= 4) risk = "medium";
+    else if (interactions.some((i) => i.severity === "medium") || valid.length >= 4)
+      risk = "medium";
 
     // Symptom keyword bump
     const probLower = (data.problem || "").toLowerCase();
     if (/bleed|chest pain|seizure|black ?out|faint|breath/.test(probLower) && risk !== "high")
       risk = risk === "low" ? "medium" : "high";
+
+    // --- NEW: Groq AI Enhancement ---
+    const apiKey = process.env.GROQ_API_KEY;
+    if (apiKey && valid.length > 0) {
+      try {
+        const groqResult = await analyzeWithGroq(
+          apiKey,
+          valid.map((v) => v.name as string),
+          labels.map((l) => ({ drug: l.drug, text: l.label?.interactionsText || "" })),
+          data.problem || "",
+        );
+
+        if (groqResult) {
+          return {
+            risk: groqResult.risk,
+            headline: groqResult.headline,
+            lines: groqResult.lines,
+            normalized,
+            interactions: groqResult.interactions.map(
+              (i: { a: string; b: string; severity: Risk; description: string }) => ({
+                ...i,
+                source: "openfda",
+              }),
+            ),
+            warnings,
+          };
+        }
+      } catch (err) {
+        console.warn("Groq AI analysis failed, using heuristic fallback:", err);
+      }
+    }
+    // --- End Groq AI ---
 
     const headline =
       risk === "high"
@@ -218,6 +266,55 @@ export const analyzeDrugs = createServerFn({ method: "POST" })
 
     return { risk, headline, lines, normalized, interactions, warnings };
   });
+
+// Groq AI Integration Helper
+async function analyzeWithGroq(
+  apiKey: string,
+  drugNames: string[],
+  fdaTexts: { drug: string; text: string }[],
+  problem: string,
+) {
+  const prompt = `
+You are the CHRONO-MED AI, a clinical pharmacology engine.
+Analyze the following drugs and the patient's reported problem.
+Drugs: ${drugNames.join(", ")}
+Symptom Context: ${problem}
+
+FDA Interaction Data Source:
+${fdaTexts.map((f) => `[${f.drug}]: ${f.text.slice(0, 1500)}`).join("\n\n")}
+
+Evaluate the risk of interaction.
+Return ONLY a JSON object with this structure:
+{
+  "risk": "high" | "medium" | "low",
+  "headline": "Short futuristic/clinical title (max 40 chars)",
+  "lines": ["3-4 bullet points summarizing the danger or safety"],
+  "interactions": [
+    { "a": "Drug A", "b": "Drug B", "severity": "high"|"medium"|"low", "description": "concise explanation" }
+  ]
+}
+`;
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [{ role: "system", content: prompt }],
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+    }),
+  });
+
+  if (!res.ok) throw new Error(`Groq API error: ${res.status}`);
+  const json = await res.json();
+  const content = json.choices?.[0]?.message?.content;
+  if (!content) return null;
+  return JSON.parse(content);
+}
 
 // ===== Server Function: OCR via OCR.Space =====
 export const ocrPrescription = createServerFn({ method: "POST" })
@@ -250,16 +347,47 @@ export const ocrPrescription = createServerFn({ method: "POST" })
       ErrorMessage?: string | string[];
     };
     if (!res.ok || json.IsErroredOnProcessing) {
-      const msg = Array.isArray(json.ErrorMessage) ? json.ErrorMessage.join("; ") : json.ErrorMessage;
+      const msg = Array.isArray(json.ErrorMessage)
+        ? json.ErrorMessage.join("; ")
+        : json.ErrorMessage;
       throw new Error(`OCR failed [${res.status}]: ${msg || "unknown"}`);
     }
-    const text = (json.ParsedResults || []).map((r) => r.ParsedText || "").join("\n").trim();
+    const text = (json.ParsedResults || [])
+      .map((r) => r.ParsedText || "")
+      .join("\n")
+      .trim();
 
     // Heuristic compound extraction: capitalised words / lines, drop common stopwords
     const stop = new Set([
-      "rx", "tab", "tabs", "cap", "caps", "tablet", "tablets", "capsule", "mg", "ml", "mcg",
-      "daily", "twice", "thrice", "morning", "night", "evening", "before", "after", "food",
-      "patient", "name", "age", "doctor", "dr", "date", "sig", "qty", "refill",
+      "rx",
+      "tab",
+      "tabs",
+      "cap",
+      "caps",
+      "tablet",
+      "tablets",
+      "capsule",
+      "mg",
+      "ml",
+      "mcg",
+      "daily",
+      "twice",
+      "thrice",
+      "morning",
+      "night",
+      "evening",
+      "before",
+      "after",
+      "food",
+      "patient",
+      "name",
+      "age",
+      "doctor",
+      "dr",
+      "date",
+      "sig",
+      "qty",
+      "refill",
     ]);
     const candidates = new Set<string>();
     for (const raw of text.split(/[\n,;]+/)) {
@@ -268,7 +396,7 @@ export const ocrPrescription = createServerFn({ method: "POST" })
       // Strip dosage/quantities
       const cleaned = line
         .replace(/\d+\s?(mg|ml|mcg|g|iu|%)/gi, "")
-        .replace(/[^A-Za-z\s\-]/g, " ")
+        .replace(/[^A-Za-z\s-]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
       // Take first 1-2 word token of length >= 4

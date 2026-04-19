@@ -12,7 +12,7 @@ export function Particles({ count = 30 }: { count?: number }) {
         const color = colors[i % colors.length];
         return { left, duration, delay, size, color, id: i };
       }),
-    [count]
+    [count],
   );
 
   return (

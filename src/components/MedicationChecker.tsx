@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Activity,
   AlertOctagon,
@@ -20,8 +21,10 @@ import {
   Skull,
   X,
   Zap,
+  Database,
 } from "lucide-react";
 import { TimeVortex } from "./TimeVortex";
+import logo from "../assets/logo.png";
 import { Waveform } from "./Waveform";
 import { RiskGauge } from "./RiskGauge";
 import { TimelineSlider } from "./TimelineSlider";
@@ -40,7 +43,18 @@ type Result = AnalysisResult;
 type SpeechRecognitionLike = {
   start: () => void;
   stop: () => void;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onresult:
+    | ((e: {
+        resultIndex: number;
+        results: {
+          length: number;
+          [key: number]: {
+            isFinal: boolean;
+            [key: number]: { transcript: string };
+          };
+        };
+      }) => void)
+    | null;
   onend: (() => void) | null;
   continuous: boolean;
   interimResults: boolean;
@@ -48,6 +62,7 @@ type SpeechRecognitionLike = {
 };
 
 export function MedicationChecker() {
+  const navigate = useNavigate();
   const [compounds, setCompounds] = useState("");
   const [problem, setProblem] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -57,6 +72,7 @@ export function MedicationChecker() {
   const [result, setResult] = useState<Result | null>(null);
   const [timeline, setTimeline] = useState(50);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [interimTranscript, setInterimTranscript] = useState("");
   const [showSuggest, setShowSuggest] = useState(false);
   const [activeSuggest, setActiveSuggest] = useState(0);
   const [loadingSuggest, setLoadingSuggest] = useState(false);
@@ -64,6 +80,14 @@ export function MedicationChecker() {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const compoundsRef = useRef<HTMLTextAreaElement | null>(null);
   const suggestSeq = useRef(0);
+
+  // Authentication barrier
+  useEffect(() => {
+    const user = localStorage.getItem("chronoUser");
+    if (!user) {
+      navigate({ to: "/auth", replace: true });
+    }
+  }, [navigate]);
 
   // Get the "current word" being typed (text after the last comma/newline before caret)
   const getCurrentToken = (text: string, caret: number) => {
@@ -117,7 +141,6 @@ export function MedicationChecker() {
     });
   };
 
-
   // Image upload
   const handleImage = (file?: File | null) => {
     if (!file) return;
@@ -167,12 +190,27 @@ export function MedicationChecker() {
     }
     const rec = new SR();
     rec.continuous = true;
-    rec.interimResults = false;
+    rec.interimResults = true;
     rec.lang = "en-US";
+
     rec.onresult = (e) => {
-      let transcript = "";
-      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript + " ";
-      setCompounds((c) => (c ? c + ", " : "") + transcript.trim());
+      let finalTranscript = "";
+      let inter = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          finalTranscript += transcript + " ";
+        } else {
+          inter += transcript;
+        }
+      }
+      setInterimTranscript(inter);
+      if (finalTranscript) {
+        setCompounds((c) => {
+          const base = c.trim();
+          return (base ? base + ", " : "") + finalTranscript.trim();
+        });
+      }
     };
     rec.onend = () => setRecording(false);
     recognitionRef.current = rec;
@@ -199,6 +237,11 @@ export function MedicationChecker() {
     try {
       const out = await analyzeDrugs({ data: { compounds, problem } });
       setResult(out);
+      // Warp to Analysis Page
+      navigate({
+        to: "/analysis",
+        search: { result: JSON.stringify(out) },
+      });
     } catch (err) {
       console.error("Analysis error", err);
       setResult({
@@ -224,22 +267,34 @@ export function MedicationChecker() {
       <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {/* HEADER */}
         <header className="holo-panel p-5 sm:p-7 flex items-center gap-5 mb-6">
-          <TimeVortex />
+          <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 group">
+            <div className="absolute inset-0 bg-cyan-500/10 blur-2xl rounded-full group-hover:bg-cyan-400/20 transition-all duration-500" />
+            <div className="relative z-10 w-full h-full p-2 bg-white/5 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden shadow-2xl transition-transform duration-500 group-hover:scale-105 group-hover:rotate-1">
+              <img
+                src={logo}
+                alt="Chrono-Med Logo"
+                className="w-full h-full object-contain filter drop-shadow-[0_0_12px_rgba(34,211,238,0.4)] mix-blend-lighten"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-cyan-500/10 to-transparent pointer-events-none" />
+            </div>
+          </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 text-[10px] sm:text-xs uppercase tracking-[0.3em] text-muted-foreground mb-1">
-              <Cpu className="w-3.5 h-3.5 amber-text" />
-              <span>Chrono-Pharma Unit · Mk IV</span>
-              <Activity className="w-3.5 h-3.5 toxic-text ml-auto sm:ml-2" />
-              <span className="toxic-text">SYS · ONLINE</span>
+              <Activity className="w-3.5 h-3.5 toxic-text" />
+              <span>Hospital Systems · Software Engine</span>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="toxic-text">NETWORK · SECURE</span>
+                <ShieldCheck className="w-3.5 h-3.5 toxic-text" />
+              </div>
             </div>
             <h1
               className="font-display text-2xl sm:text-4xl neon-text glitch flicker leading-tight"
-              data-text="Medication Conflict Checker"
+              data-text="CHRONO-MED DISCOVERY"
             >
-              Medication Conflict Checker
+              CHRONO-MED DISCOVERY
             </h1>
             <p className="font-mono-tw text-xs sm:text-sm text-muted-foreground mt-1">
-              ⟶ Temporal Analysis Engine · v1.2.0-β
+              ⟶ Clinical Support Software · v2.4.0-CORE
             </p>
           </div>
           <div className="hidden sm:block brass px-3 py-2 rounded-md text-xs">
@@ -252,7 +307,11 @@ export function MedicationChecker() {
         <div className="grid lg:grid-cols-3 gap-5 mb-6">
           {/* TEXT INPUT */}
           <section className="holo-panel p-5 lg:col-span-2">
-            <SectionTitle icon={<FileText className="w-4 h-4" />} label="Compound Manifest" hint="text" />
+            <SectionTitle
+              icon={<FileText className="w-4 h-4" />}
+              label="Compound Manifest"
+              hint="text"
+            />
             <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
               <Pill className="w-4 h-4 neon-text" />
               <FlaskConical className="w-4 h-4 toxic-text" />
@@ -290,7 +349,11 @@ export function MedicationChecker() {
                   focus:outline-none focus:border-[var(--neon)] focus:shadow-[0_0_18px_var(--neon)]/40 transition"
               />
               <div className="absolute top-2 right-3 text-[10px] uppercase tracking-widest text-muted-foreground">
-                {loadingSuggest ? <span className="neon-text">⟳ scanning…</span> : `${compounds.length} ch`}
+                {loadingSuggest ? (
+                  <span className="neon-text">⟳ scanning…</span>
+                ) : (
+                  `${compounds.length} ch`
+                )}
               </div>
               {showSuggest && suggestions.length > 0 && (
                 <ul
@@ -325,7 +388,11 @@ export function MedicationChecker() {
 
           {/* IMAGE UPLOAD */}
           <section className="holo-panel p-5">
-            <SectionTitle icon={<ImagePlus className="w-4 h-4" />} label="Prescription Scan" hint="image" />
+            <SectionTitle
+              icon={<ImagePlus className="w-4 h-4" />}
+              label="Prescription Scan"
+              hint="image"
+            />
             <input
               ref={fileRef}
               type="file"
@@ -362,11 +429,13 @@ export function MedicationChecker() {
                 <div className="absolute bottom-2 left-2 flex items-center gap-1 text-[10px] uppercase tracking-widest">
                   {scanning ? (
                     <>
-                      <Scan className="w-3.5 h-3.5 toxic-text" /> <span className="toxic-text">scanning…</span>
+                      <Scan className="w-3.5 h-3.5 toxic-text" />{" "}
+                      <span className="toxic-text">scanning…</span>
                     </>
                   ) : (
                     <>
-                      <Eye className="w-3.5 h-3.5 neon-text" /> <span className="neon-text">preview ready</span>
+                      <Eye className="w-3.5 h-3.5 neon-text" />{" "}
+                      <span className="neon-text">preview ready</span>
                     </>
                   )}
                 </div>
@@ -397,7 +466,9 @@ export function MedicationChecker() {
                 <Waveform active={recording} />
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground mt-1">
                   {recording ? (
-                    <span className="toxic-text">▶ recording · speak now</span>
+                    <span className="toxic-text">
+                      ▶ recording · {interimTranscript ? `"${interimTranscript}"` : "speak now"}
+                    </span>
                   ) : (
                     <span>tap mic to dictate compounds</span>
                   )}
@@ -431,13 +502,12 @@ export function MedicationChecker() {
           </section>
         </div>
 
-        {/* ACTION BUTTON */}
-        <div className="flex justify-center mb-8">
+        <div className="flex justify-center mb-8 gap-4 flex-col sm:flex-row max-w-fit mx-auto">
           <button
             onClick={runAnalysis}
             disabled={analyzing}
             className="group relative neon-pulse brass px-8 sm:px-12 py-4 rounded-full font-display text-sm sm:text-base
-              uppercase tracking-[0.25em] flex items-center gap-3 disabled:opacity-70"
+              uppercase tracking-[0.25em] flex items-center justify-center gap-3 disabled:opacity-70"
           >
             {analyzing ? (
               <>
@@ -455,6 +525,15 @@ export function MedicationChecker() {
                 <Play className="w-4 h-4" />
               </>
             )}
+          </button>
+
+          <button
+            onClick={() => navigate({ to: "/history" })}
+            className="group relative border border-[var(--brass)]/30 hover:bg-[var(--brass)]/5 px-8 sm:px-8 py-4 rounded-full font-display text-sm sm:text-base
+              uppercase tracking-[0.25em] flex items-center justify-center gap-3 transition-colors text-muted-foreground hover:text-foreground"
+          >
+            <Database className="w-5 h-5 group-hover:text-[var(--neon)] transition-colors" />
+            Archives
           </button>
         </div>
 
@@ -518,7 +597,8 @@ function SectionTitle({
 }
 
 function Readout({ result }: { result: Result }) {
-  const Icon = result.risk === "high" ? Skull : result.risk === "medium" ? AlertOctagon : ShieldCheck;
+  const Icon =
+    result.risk === "high" ? Skull : result.risk === "medium" ? AlertOctagon : ShieldCheck;
   const color =
     result.risk === "high"
       ? "text-destructive"
@@ -591,7 +671,8 @@ function Readout({ result }: { result: Result }) {
                 }`}
               >
                 <div className="font-display tracking-wider">
-                  <span className="neon-text">{i.a}</span> ⇄ <span className="neon-text">{i.b}</span>{" "}
+                  <span className="neon-text">{i.a}</span> ⇄{" "}
+                  <span className="neon-text">{i.b}</span>{" "}
                   <span className="text-muted-foreground">[{i.severity}]</span>
                 </div>
                 <div className="text-foreground/70 mt-1">{i.description}</div>
