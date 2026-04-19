@@ -192,7 +192,7 @@ function AnalysisPage() {
 
         <div className="grid md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
-            <section className="holo-panel p-6 backdrop-blur-xl bg-background/40 blur-[3px] hover:blur-none opacity-70 hover:opacity-100 transition-all duration-700 cursor-crosshair">
+            <section className="holo-panel p-6 backdrop-blur-xl bg-background/40 transition-all cursor-crosshair">
               <div className="flex items-center gap-3 mb-6">
                 <RiskIcon risk={result.risk} className="w-8 h-8" />
                 <h2 className="text-xl font-display uppercase tracking-wider">Clinical Readout</h2>
@@ -218,7 +218,7 @@ function AnalysisPage() {
             </section>
 
             {result.interactions.length > 0 && (
-              <section className="holo-panel p-6 backdrop-blur-xl bg-background/40 border-primary/20 blur-[3px] hover:blur-none opacity-70 hover:opacity-100 transition-all duration-700 cursor-crosshair">
+              <section className="holo-panel p-6 backdrop-blur-xl bg-background/40 border-primary/20 transition-all cursor-crosshair">
                 <h3 className="text-xs uppercase tracking-[0.3em] text-primary mb-4 flex items-center gap-2">
                   <Activity className="w-4 h-4 flicker" />
                   Detected Conflicts
@@ -251,7 +251,7 @@ function AnalysisPage() {
 
           <aside className="space-y-6">
             <div
-              className={`holo-panel p-6 text-center border-2 ${getRiskBorder(result.risk)} blur-[3px] hover:blur-none opacity-70 hover:opacity-100 transition-all duration-700 cursor-crosshair`}
+              className={`holo-panel p-6 text-center border-2 ${getRiskBorder(result.risk)} transition-all cursor-crosshair`}
             >
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-4">
                 Risk Index
@@ -265,7 +265,7 @@ function AnalysisPage() {
               </div>
             </div>
 
-            <div className="holo-panel p-6 bg-primary/5 blur-[3px] hover:blur-none opacity-70 hover:opacity-100 transition-all duration-700 cursor-crosshair">
+            <div className="holo-panel p-6 bg-primary/5 transition-all cursor-crosshair">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-4">
                 Compounds
               </div>
