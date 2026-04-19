@@ -4,6 +4,11 @@
 
 ---
 
+## 🚀 Live Demo
+**Access the fully deployed application here:** [https://druginteraction.rohithsd0222.workers.dev/](https://druginteraction.rohithsd0222.workers.dev/)
+
+---
+
 ## 🎯 Problem Statement
 
 Healthcare professionals and patients often struggle to quickly and accurately determine potential drug interactions when combining multiple medications. The sheer complexity of pharmacological data makes it difficult to understand the severity and mechanisms of these interactions, which can lead to adverse drug events. 
@@ -63,6 +68,18 @@ Chrono-Med Check solves this by offering a premium, futuristic 3D visual interfa
    npm run dev
    ```
    The application will be available at `http://localhost:5173`.
+
+## 🌍 Deployment (Cloudflare Workers)
+
+This application is built as a full-stack **TanStack Start** app leveraging the `@cloudflare/vite-plugin`. This means it generates a `.wrangler` worker configuration and requires a Cloudflare environment to run perfectly (standard Node.js environments like Render are not suitable).
+
+To deploy your own version:
+1. Log into your Cloudflare dashboard and navigate to **Workers & Pages**.
+2. Click **Create application** -> **Deploy your Worker Project** and connect your GitHub repository.
+3. Configure the build settings as follows:
+   - **Build command:** `npm run build`
+   - **Deploy command:** `npx wrangler deploy`
+4. Add your **Environment Variables** (`VITE_GROQ_API_KEY`, etc.) directly into the Cloudflare UI to securely power the AI features.
 
 ## 📂 Project Structure Overview
 
