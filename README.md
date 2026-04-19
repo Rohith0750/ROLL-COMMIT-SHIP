@@ -54,6 +54,7 @@ Chrono-Med Check solves this by offering a premium, futuristic 3D visual interfa
    Create a `.env` file in the root directory and add securely your Groq API Key (and any other necessary variables):
    ```env
    VITE_GROQ_API_KEY=your_groq_api_key_here
+   VITE_OCR_SPACE_API_KEY=your_ocr_space_api_key_here
    ```
    *(Note: Never commit your `.env` file!)*
 
@@ -65,9 +66,33 @@ Chrono-Med Check solves this by offering a premium, futuristic 3D visual interfa
 
 ## 📂 Project Structure Overview
 
-- `src/components/`: Reusable UI components (buttons, dialogs, etc.) and complex specific components like `Antigravity.tsx`.
-- `src/routes/`: Route definitions for the TanStack router (`index.tsx`, `analysis.tsx`, `dashboard.tsx`, `history.tsx`).
-- `src/server/`: Backend integration utilities (e.g., `drug-analysis.ts` for AI processing).
+```text
+chrono-med-check/
+├── public/                 # Static assets (favicons, etc.)
+├── src/                    # Source code
+│   ├── assets/             # Images and design assets
+│   ├── components/         # Reusable React components
+│   │   ├── ui/             # Shadcn/Radix atomic UI components
+│   │   └── Antigravity.tsx # Complex 3D Visualization Engine
+│   ├── routes/             # TanStack Router page definitions
+│   │   ├── __root.tsx      # Root layout
+│   │   ├── index.tsx       # Landing page
+│   │   ├── auth.tsx        # Authentication flow
+│   │   ├── dashboard.tsx   # Primary user interface
+│   │   ├── analysis.tsx    # Result & 3D report view
+│   │   └── history.tsx     # Past analyses local tracker
+│   ├── server/             # Server-side functions / APIs
+│   │   └── drug-analysis.ts# Heuristic + AI (Groq) Logic
+│   ├── lib/                # Utility functions & helpers
+│   ├── index.css           # Global Tailwind typography/variables
+│   └── routeTree.gen.ts    # Auto-generated routing tree
+├── .env                    # Environment variables (Not committed)
+├── .gitignore              # Git ignore configuration
+├── package.json            # Node.js dependencies & scripts
+├── tailwind.config.ts      # Tailwind CSS configuration
+├── tsconfig.json           # TypeScript compilation settings
+└── vite.config.ts          # Vite bundler configuration
+```
 
 ## ⚙️ Backend Flow & AI Processing
 

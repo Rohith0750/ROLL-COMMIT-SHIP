@@ -214,7 +214,7 @@ export const analyzeDrugs = createServerFn({ method: "POST" })
       risk = risk === "low" ? "medium" : "high";
 
     // --- NEW: Groq AI Enhancement ---
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.VITE_GROQ_API_KEY;
     if (apiKey && valid.length > 0) {
       try {
         const groqResult = await analyzeWithGroq(
@@ -325,7 +325,7 @@ export const ocrPrescription = createServerFn({ method: "POST" })
     return { imageBase64: input.imageBase64, mimeType: input.mimeType || "image/jpeg" };
   })
   .handler(async ({ data }): Promise<{ text: string; compounds: string[] }> => {
-    const apiKey = process.env.OCR_SPACE_API_KEY;
+    const apiKey = process.env.VITE_OCR_SPACE_API_KEY;
     if (!apiKey) throw new Error("OCR_SPACE_API_KEY is not configured");
 
     const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
